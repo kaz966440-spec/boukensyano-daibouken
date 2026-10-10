@@ -1,0 +1,1616 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>冒険者の大冒険 - 2D Action RPG</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            width: 900px;
+            height: 550px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid #38bdf8;
+            background: #1e293b;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 14px;
+        }
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: rgba(15, 23, 42, 0.88);
+            padding: 10px 16px;
+            border-radius: 10px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .hud-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .stat-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .stat-label {
+            font-weight: bold;
+            font-size: 13px;
+            width: 80px;
+            color: #cbd5e1;
+        }
+        .bar-bg {
+            width: 160px;
+            height: 16px;
+            background: #334155;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #475569;
+            position: relative;
+        }
+        .bar-fill {
+            height: 100%;
+            transition: width 0.1s ease-out;
+        }
+        .hp-fill { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .boss-hp-fill { background: linear-gradient(90deg, #dc2626, #fb923c); }
+        .kamehameha-fill { background: linear-gradient(90deg, #a855f7, #ec4899); }
+        .bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #000;
+        }
+        .hud-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .info-badge {
+            background: #1e293b;
+            padding: 5px 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .badge-icon { font-size: 15px; }
+
+        /* Stage Banner */
+        #stage-banner {
+            position: absolute;
+            top: 76px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.9);
+            border: 2px solid #fbbf24;
+            padding: 6px 20px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fbbf24;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.3);
+            text-align: center;
+        }
+
+        /* Message Log Overlay */
+        #msg-log {
+            position: absolute;
+            top: 115px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.85);
+            color: #38bdf8;
+            border: 1px solid #0284c7;
+            padding: 4px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        /* Controls Help Bottom */
+        .controls-help {
+            background: rgba(15, 23, 42, 0.85);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #94a3b8;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .key {
+            background: #334155;
+            color: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        /* Overlays (Modal, Game Over, Victory, Village) */
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(6px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .hidden { display: none !important; }
+
+        .modal-title {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .btn {
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+            margin: 6px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
+        }
+        .btn:disabled {
+            background: #475569;
+            cursor: not-allowed;
+            box-shadow: none;
+            opacity: 0.6;
+        }
+
+        /* Village Overlay UI */
+        .village-panel {
+            width: 85%;
+            max-width: 760px;
+            background: #1e293b;
+            border: 2px solid #38bdf8;
+            border-radius: 12px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            align-items: center;
+        }
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            width: 100%;
+        }
+        .shop-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            text-align: center;
+        }
+        .shop-card-title { font-size: 15px; font-weight: bold; color: #f3f4f6; }
+        .shop-card-desc { font-size: 11px; color: #9ca3af; }
+        .shop-card-price { font-size: 13px; font-weight: bold; color: #fbbf24; }
+
+        /* Minigame Modal */
+        .minigame-box {
+            background: #0f172a;
+            border-radius: 10px;
+            padding: 18px;
+            border: 1px solid #38bdf8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            min-width: 320px;
+        }
+        .tictactoe-board {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 6px;
+        }
+        .ttt-cell {
+            background: #1e293b;
+            border: 2px solid #475569;
+            border-radius: 6px;
+            font-size: 28px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #38bdf8;
+        }
+        .ttt-cell.o { color: #34d399; }
+        .ttt-cell.x { color: #f87171; }
+
+        /* Rock Paper Scissors UI */
+        .rps-btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .rps-btn {
+            font-size: 24px;
+            padding: 12px 18px;
+            border-radius: 8px;
+            border: 2px solid #38bdf8;
+            background: #1e293b;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .rps-btn:hover { transform: scale(1.1); }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="900" height="550"></canvas>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="hud-stats">
+                <div class="stat-bar-container">
+                    <div class="stat-label">プレイヤーHP</div>
+                    <div class="bar-bg">
+                        <div id="hp-bar" class="bar-fill hp-fill" style="width: 100%;"></div>
+                        <div id="hp-text" class="bar-text">10 / 10</div>
+                    </div>
+                </div>
+                <div id="kame-container" class="stat-bar-container hidden">
+                    <div class="stat-label">カメハメハ</div>
+                    <div class="bar-bg">
+                        <div id="kame-charge-bar" class="bar-fill kamehameha-fill" style="width: 0%;"></div>
+                        <div id="kame-charge-text" class="bar-text">F長押し(10秒)</div>
+                    </div>
+                </div>
+                <div id="boss-hp-container" class="stat-bar-container hidden">
+                    <div id="boss-name-label" class="stat-label" style="color:#f87171;">ボスHP</div>
+                    <div class="bar-bg" style="width: 220px;">
+                        <div id="boss-hp-bar" class="bar-fill boss-hp-fill" style="width: 100%;"></div>
+                        <div id="boss-hp-text" class="bar-text">15 / 15</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hud-info">
+                <div class="info-badge"><span class="badge-icon">🪨</span> 石ころ: <span id="rock-count">0</span></div>
+                <div class="info-badge"><span class="badge-icon">🥪</span> サンドイッチ: <span id="sandwich-count">0</span></div>
+                <div class="info-badge"><span class="badge-icon">🪙</span> ゴールド: <span id="gold-count">0</span> G</div>
+                <div class="info-badge"><span class="badge-icon">⚔️</span> 武器: <span id="weapon-name">素手</span> (攻:<span id="weapon-atk">1</span>)</div>
+                <div class="info-badge"><span class="badge-icon">🛡️</span> 防具: <span id="armor-name">なし</span></div>
+            </div>
+        </div>
+
+        <div id="stage-banner">エリア 1 - ステージ 1</div>
+        <div id="msg-log">メッセージ</div>
+
+        <div class="controls-help">
+            <span>移動: <span class="key">←</span> <span class="key">→</span> / <span class="key">A</span> <span class="key">D</span> (ジャンプ: <span class="key">↑</span>/<span class="key">W</span>)</span>
+            <span>通常攻撃: <span class="key">Space</span></span>
+            <span>石ころ投擲: <span class="key">R</span> (攻撃力1)</span>
+            <span>回復: <span class="key">H</span> (サンドイッチ消費 HP+2)</span>
+            <span>カメハメハ: <span class="key">F</span> (伝説の剣10秒長押し/攻撃力30)</span>
+        </div>
+    </div>
+
+    <!-- Start Screen Overlay -->
+    <div id="start-modal" class="modal-overlay">
+        <h1 class="modal-title">⚔️ 冒険者の大冒険 🗡️</h1>
+        <p style="margin-bottom: 20px; color: #cbd5e1; max-width: 540px; text-align: center; line-height: 1.6;">
+            冒険をしたがっている主人公となり、全5エリア（全20ステージ）を突破せよ！<br>
+            最奥に潜むラスボス「カイザードラゴン」を撃パーし、世界を救おう！
+        </p>
+        <button class="btn" id="start-btn">冒険へ出発する！</button>
+    </div>
+
+    <!-- Village Modal Overlay -->
+    <div id="village-modal" class="modal-overlay hidden">
+        <div class="village-panel">
+            <h2 style="color: #38bdf8; font-size: 24px;">🏡 エリア2 - ステージ2：平和な村</h2>
+            <p style="color: #cbd5e1; text-align: center; font-size: 14px;">
+                友好キャラの村人がいます！ミニゲームに勝利すると30ゴールド手に入ります。<br>
+                集めたゴールドでショップから装備や回復アイテムを購入しましょう。
+            </p>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 4px;">
+                <button class="btn" id="minigame-ttt-btn">🎮 ○×ゲーム (勝利で30G)</button>
+                <button class="btn" id="minigame-rps-btn">✊ じゃんけん (勝利で30G)</button>
+                <button class="btn" id="minigame-fish-btn">🎣 魚釣りゲーム (勝利で30G)</button>
+            </div>
+
+            <div class="shop-grid">
+                <div class="shop-card">
+                    <div class="shop-card-title">⚔️ 剣</div>
+                    <div class="shop-card-desc">攻撃力 5 の近接武器</div>
+                    <div class="shop-card-price">30 ゴールド</div>
+                    <button class="btn" id="buy-sword-btn">購入</button>
+                </div>
+                <div class="shop-card">
+                    <div class="shop-card-title">🛡️ 鎧</div>
+                    <div class="shop-card-desc">防御力 3 (被ダメージ軽減)</div>
+                    <div class="shop-card-price">30 ゴールド</div>
+                    <button class="btn" id="buy-armor-btn">購入</button>
+                </div>
+                <div class="shop-card">
+                    <div class="shop-card-title">🥪 サンドイッチ</div>
+                    <div class="shop-card-desc">HキーでHPを2個回復</div>
+                    <div class="shop-card-price">10 ゴールド</div>
+                    <button class="btn" id="buy-sandwich-btn">購入</button>
+                </div>
+            </div>
+
+            <button class="btn" id="leave-village-btn" style="background: linear-gradient(135deg, #10b981, #059669); margin-top: 6px;">次のステージへ向かう →</button>
+        </div>
+    </div>
+
+    <!-- Minigame Modal -->
+    <div id="minigame-modal" class="modal-overlay hidden">
+        <div class="minigame-box">
+            <h3 id="minigame-title" style="color: #fbbf24; font-size: 20px;">ミニゲーム</h3>
+            
+            <!-- Minigame 1: Tic Tac Toe -->
+            <div id="ttt-container" class="hidden">
+                <div class="tictactoe-board">
+                    <div class="ttt-cell" data-idx="0"></div>
+                    <div class="ttt-cell" data-idx="1"></div>
+                    <div class="ttt-cell" data-idx="2"></div>
+                    <div class="ttt-cell" data-idx="3"></div>
+                    <div class="ttt-cell" data-idx="4"></div>
+                    <div class="ttt-cell" data-idx="5"></div>
+                    <div class="ttt-cell" data-idx="6"></div>
+                    <div class="ttt-cell" data-idx="7"></div>
+                    <div class="ttt-cell" data-idx="8"></div>
+                </div>
+                <p id="ttt-status" style="margin-top: 10px; font-size: 14px; text-align: center; color: #cbd5e1;">あなたの番です (O)</p>
+            </div>
+
+            <!-- Minigame 2: Rock Paper Scissors -->
+            <div id="rps-container" class="hidden" style="text-align: center;">
+                <p style="font-size: 14px; color: #cbd5e1; margin-bottom: 10px;">手を選んで村人と勝負！</p>
+                <div class="rps-btn-group">
+                    <button class="rps-btn" data-hand="rock">✊</button>
+                    <button class="rps-btn" data-hand="paper">✋</button>
+                    <button class="rps-btn" data-hand="scissors">✌️</button>
+                </div>
+                <p id="rps-status" style="margin-top: 14px; font-size: 14px; color: #fbbf24; font-weight: bold;">じゃんけん... ポン！</p>
+            </div>
+
+            <!-- Minigame 3: Fishing -->
+            <div id="fishing-container" class="hidden" style="text-align: center;">
+                <canvas id="fishingCanvas" width="300" height="150" style="border: 2px solid #38bdf8; border-radius: 6px;"></canvas>
+                <p style="margin-top: 8px; font-size: 13px; color: #cbd5e1;">緑のエリアに魚が入ったらボタンを押そう！</p>
+                <button class="btn" id="fish-pull-btn" style="margin-top: 8px;">竿を引く！</button>
+            </div>
+
+            <button class="btn" id="close-minigame-btn" style="margin-top: 12px; background: #475569;">村に戻る</button>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameover-modal" class="modal-overlay hidden">
+        <h1 style="font-size: 40px; color: #ef4444; margin-bottom: 10px;">GAME OVER</h1>
+        <p style="color: #cbd5e1; margin-bottom: 20px;">力尽きてしまった... 再び立ち上がろう！</p>
+        <button class="btn" id="restart-btn">最初からやり直す</button>
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="victory-modal" class="modal-overlay hidden">
+        <h1 style="font-size: 36px; color: #38bdf8; margin-bottom: 10px;">🎉 ゲームクリア！ 🎉</h1>
+        <p style="color: #cbd5e1; margin-bottom: 14px; max-width: 520px; text-align: center; line-height: 1.6;">
+            ドラゴンの神殿の最奥にて、伝説のカイゼードラゴンを見事に撃破した！<br>
+            冒険者の名誉と世界の平和は守られた！
+        </p>
+        <button class="btn" id="victory-restart-btn">もう一度最初から遊ぶ</button>
+    </div>
+</div>
+
+<script>
+/* ==========================================================================
+   GAME ENGINE & AUDIO
+   ========================================================================== */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const GRAVITY = 0.55;
+const GROUND_Y = 460;
+const CANVAS_WIDTH = 900;
+const CANVAS_HEIGHT = 550;
+const STAGE_LENGTH = 2400; // Stage world length
+
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function playSound(type) {
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    if (type === 'jump') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(380, now + 0.12);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12);
+    } else if (type === 'hit') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(280, now);
+        osc.frequency.setValueAtTime(100, now + 0.05);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+        osc.start(now); osc.stop(now + 0.08);
+    } else if (type === 'kamehameha') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.linearRampToValueAtTime(700, now + 0.8);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.8);
+        osc.start(now); osc.stop(now + 0.8);
+    } else if (type === 'coin') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.setValueAtTime(900, now + 0.08);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12);
+    } else if (type === 'heal') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(350, now);
+        osc.frequency.exponentialRampToValueAtTime(750, now + 0.2);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+    } else if (type === 'throw') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(150, now + 0.1);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
+    }
+}
+
+function showMessage(txt) {
+    const el = document.getElementById('msg-log');
+    el.innerText = txt;
+    el.style.opacity = '1';
+    setTimeout(() => { el.style.opacity = '0'; }, 2200);
+}
+
+// Input Handlers
+const keys = { right: false, left: false, up: false, attack: false, kame: false };
+const keyPressTimes = { kameStart: 0 };
+
+window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        keys.up = true;
+        player.jump();
+    }
+    if (e.code === 'Space') {
+        keys.attack = true;
+        player.executeAttack();
+    }
+    if (e.key === 'h' || e.key === 'H') {
+        player.useSandwich();
+    }
+    if (e.key === 'r' || e.key === 'R') {
+        player.throwRock();
+    }
+    if (e.key === 'f' || e.key === 'F') {
+        keys.kame = true;
+        keyPressTimes.kameStart = Date.now();
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.up = false;
+    if (e.code === 'Space') keys.attack = false;
+    if (e.key === 'f' || e.key === 'F') {
+        keys.kame = false;
+        const duration = (Date.now() - keyPressTimes.kameStart) / 1000;
+        player.executeKamehameha(duration);
+        keyPressTimes.kameStart = 0;
+    }
+});
+
+/* ==========================================================================
+   GAME MODEL & ENTITIES
+   ========================================================================== */
+
+let cameraX = 0;
+let gameState = 'START'; // START, PLAYING, VILLAGE, GAMEOVER, VICTORY
+let currentArea = 1;
+let currentStage = 1;
+
+const player = {
+    x: 100,
+    y: GROUND_Y - 44,
+    width: 40,
+    height: 44,
+    vx: 0,
+    vy: 0,
+    speed: 5.5,
+    isGrounded: true,
+    hp: 10,
+    maxHp: 10,
+    gold: 0,
+    sandwiches: 0,
+    rocks: 0,
+    facingRight: true,
+    invulnerableTimer: 0,
+
+    weapon: { name: '素手', atk: 1, type: 'melee' }, // melee, ranged, hydro, legend
+    armor: { name: 'なし', def: 0 },
+
+    update() {
+        if (keys.right) {
+            this.vx = this.speed;
+            this.facingRight = true;
+        } else if (keys.left) {
+            this.vx = -this.speed;
+            this.facingRight = false;
+        } else {
+            this.vx = 0;
+        }
+
+        this.x += this.vx;
+        if (this.x < 0) this.x = 0;
+        if (this.x > STAGE_LENGTH - this.width) this.x = STAGE_LENGTH - this.width;
+
+        this.vy += GRAVITY;
+        this.y += this.vy;
+
+        if (this.y >= GROUND_Y - this.height) {
+            this.y = GROUND_Y - this.height;
+            this.vy = 0;
+            this.isGrounded = true;
+        }
+
+        if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+
+        cameraX = this.x - CANVAS_WIDTH / 3;
+        if (cameraX < 0) cameraX = 0;
+        if (cameraX > STAGE_LENGTH - CANVAS_WIDTH) cameraX = STAGE_LENGTH - CANVAS_WIDTH;
+    },
+
+    jump() {
+        if (this.isGrounded) {
+            this.vy = -12.5;
+            this.isGrounded = false;
+            playSound('jump');
+        }
+    },
+
+    executeAttack() {
+        playSound('hit');
+        const atkVal = this.weapon.atk;
+
+        if (this.weapon.type === 'ranged' || this.weapon.type === 'hydro') {
+            // Ranged projectile weapon (Bazooka / Hydrogun)
+            projectiles.push(new PlayerProjectile(
+                this.x + (this.facingRight ? this.width : -10),
+                this.y + 12,
+                this.facingRight ? 13 : -13,
+                atkVal,
+                this.weapon.type
+            ));
+        } else {
+            // Melee attack
+            const hitWidth = 55;
+            const hitX = this.facingRight ? this.x + this.width : this.x - hitWidth;
+            const hitRect = { x: hitX, y: this.y - 10, width: hitWidth, height: this.height + 20 };
+
+            slashes.push(new SlashEffect(hitX, this.y, this.facingRight));
+
+            enemies.forEach(enemy => {
+                if (checkCollision(hitRect, enemy)) {
+                    enemy.takeDamage(atkVal);
+                }
+            });
+        }
+    },
+
+    throwRock() {
+        if (this.rocks > 0) {
+            this.rocks--;
+            playSound('throw');
+            projectiles.push(new PlayerProjectile(
+                this.x + (this.facingRight ? this.width : -10),
+                this.y + 14,
+                this.facingRight ? 10 : -10,
+                1,
+                'rock'
+            ));
+            updateHUDInfo();
+        } else {
+            showMessage('石ころを持っていません！');
+        }
+    },
+
+    executeKamehameha(durationSec) {
+        if (this.weapon.type !== 'legend') {
+            return;
+        }
+        if (durationSec >= 10.0) {
+            playSound('kamehameha');
+            projectiles.push(new KamehamehaBeam(this.x + (this.facingRight ? this.width : 0), this.y + 8, this.facingRight));
+            showMessage('💥 カメハメハ放ち！！ (攻撃力 30)');
+        } else {
+            showMessage(`チャージ不足！ (長押し ${durationSec.toFixed(1)}/10.0秒)`);
+        }
+    },
+
+    useSandwich() {
+        if (this.sandwiches > 0 && this.hp < this.maxHp) {
+            this.sandwiches--;
+            this.hp = Math.min(this.maxHp, this.hp + 2);
+            playSound('heal');
+            createParticles(this.x + this.width / 2, this.y + this.height / 2, '#34d399', 15);
+            showMessage('🥪 サンドイッチを食べてHPが2回復した！');
+            updateHUDInfo();
+        } else if (this.sandwiches === 0) {
+            showMessage('サンドイッチを持っていません！');
+        }
+    },
+
+    takeDamage(amount) {
+        if (this.invulnerableTimer > 0) return;
+        const actualDamage = Math.max(1, amount - this.armor.def);
+        this.hp -= actualDamage;
+        this.invulnerableTimer = 35;
+        playSound('hit');
+        createParticles(this.x + this.width / 2, this.y + this.height / 2, '#ef4444', 15);
+
+        if (this.hp <= 0) {
+            this.hp = 0;
+            gameState = 'GAMEOVER';
+            document.getElementById('gameover-modal').classList.remove('hidden');
+        }
+    },
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - cameraX, this.y);
+
+        if (this.invulnerableTimer % 6 >= 3) ctx.globalAlpha = 0.5;
+
+        if (!this.facingRight) {
+            ctx.translate(this.width, 0);
+            ctx.scale(-1, 1);
+        }
+
+        // Draw Adventurer (Human Player Sprite)
+        // Body / Tunic
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(8, 16, 24, 20);
+
+        // Head / Skin
+        ctx.fillStyle = '#fde047'; // Adventurer Hair
+        ctx.fillRect(10, 2, 20, 8);
+        ctx.fillStyle = '#fed7aa'; // Face skin
+        ctx.fillRect(10, 8, 20, 10);
+
+        // Eyes
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(22, 10, 3, 4);
+
+        // Legs
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(10, 36, 8, 8);
+        ctx.fillRect(22, 36, 8, 8);
+
+        // Armor Overlay (If bought armor)
+        if (this.armor.def > 0) {
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(6, 14, 28, 22);
+        }
+
+        // Weapon Sprite
+        if (this.weapon.name === '剣' || this.weapon.name === '伝説の剣') {
+            ctx.fillStyle = this.weapon.name === '伝説の剣' ? '#fbbf24' : '#e2e8f0';
+            ctx.fillRect(28, 12, 18, 4);
+            ctx.fillRect(28, 9, 3, 10);
+        } else if (this.weapon.name === 'バズーカ') {
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(24, 10, 20, 8);
+        } else if (this.weapon.name === 'ハイドロガン') {
+            ctx.fillStyle = '#0284c7';
+            ctx.fillRect(24, 10, 20, 8);
+        }
+
+        ctx.restore();
+    }
+};
+
+/* ==========================================================================
+   EFFECTS & PARTICLES
+   ========================================================================== */
+
+const particles = [];
+function createParticles(x, y, color, count = 10) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            color: color,
+            radius: Math.random() * 4 + 2,
+            life: 20 + Math.random() * 10
+        });
+    }
+}
+
+const slashes = [];
+class SlashEffect {
+    constructor(x, y, facingRight) {
+        this.x = x;
+        this.y = y;
+        this.facingRight = facingRight;
+        this.life = 10;
+    }
+    update() { this.life--; }
+    draw() {
+        ctx.save();
+        ctx.strokeStyle = player.weapon.name === '伝説の剣' ? '#fbbf24' : '#38bdf8';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        if (this.facingRight) {
+            ctx.arc(this.x - cameraX + 15, this.y + 20, 25, -Math.PI / 3, Math.PI / 3);
+        } else {
+            ctx.arc(this.x - cameraX + 35, this.y + 20, 25, (2 * Math.PI) / 3, (4 * Math.PI) / 3);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+/* ==========================================================================
+   PROJECTILES
+   ========================================================================== */
+
+const projectiles = [];
+
+class PlayerProjectile {
+    constructor(x, y, vx, damage, type = 'rock') {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.damage = damage;
+        this.type = type;
+        this.radius = type === 'rock' ? 5 : (type === 'hydro' ? 9 : 8);
+        this.active = true;
+    }
+    update() {
+        this.x += this.vx;
+        enemies.forEach(enemy => {
+            if (this.active && checkCollision({ x: this.x - this.radius, y: this.y - this.radius, width: this.radius * 2, height: this.radius * 2 }, enemy)) {
+                enemy.takeDamage(this.damage);
+                this.active = false;
+                createParticles(this.x, this.y, '#fbbf24', 10);
+            }
+        });
+        if (this.x < cameraX || this.x > cameraX + CANVAS_WIDTH + 100) this.active = false;
+    }
+    draw() {
+        ctx.save();
+        if (this.type === 'rock') ctx.fillStyle = '#94a3b8';
+        else if (this.type === 'hydro') ctx.fillStyle = '#38bdf8';
+        else ctx.fillStyle = '#f59e0b'; // Bazooka
+
+        ctx.beginPath();
+        ctx.arc(this.x - cameraX, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class KamehamehaBeam {
+    constructor(x, y, facingRight) {
+        this.x = x;
+        this.y = y - 12;
+        this.facingRight = facingRight;
+        this.width = 650;
+        this.height = 44;
+        this.life = 35;
+        this.damage = 30; // Specification: 30 ATK
+        this.hitEnemies = new Set();
+    }
+    update() {
+        this.life--;
+        const beamX = this.facingRight ? this.x : this.x - this.width;
+        const rect = { x: beamX, y: this.y, width: this.width, height: this.height };
+        enemies.forEach(enemy => {
+            if (!this.hitEnemies.has(enemy) && checkCollision(rect, enemy)) {
+                enemy.takeDamage(this.damage);
+                this.hitEnemies.add(enemy);
+            }
+        });
+    }
+    draw() {
+        ctx.save();
+        const beamX = this.facingRight ? this.x - cameraX : this.x - cameraX - this.width;
+        const grad = ctx.createLinearGradient(0, this.y, 0, this.y + this.height);
+        grad.addColorStop(0, '#a855f7');
+        grad.addColorStop(0.5, '#ffffff');
+        grad.addColorStop(1, '#ec4899');
+
+        ctx.fillStyle = grad;
+        ctx.fillRect(beamX, this.y, this.width, this.height);
+        ctx.restore();
+    }
+}
+
+class EnemyProjectile {
+    constructor(x, y, vx, damage) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.damage = damage;
+        this.radius = 6;
+        this.active = true;
+    }
+    update() {
+        this.x += this.vx;
+        if (this.active && checkCollision({ x: this.x - this.radius, y: this.y - this.radius, width: this.radius * 2, height: this.radius * 2 }, player)) {
+            player.takeDamage(this.damage);
+            this.active = false;
+        }
+        if (this.x < 0 || this.x > STAGE_LENGTH) this.active = false;
+    }
+    draw() {
+        ctx.save();
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(this.x - cameraX, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+/* ==========================================================================
+   ENEMIES & ITEMS
+   ========================================================================== */
+
+let enemies = [];
+let items = [];
+
+class Enemy {
+    constructor(x, y, type, hp, atk, isBoss = false, isRanged = false, isStationary = false, attackCooldown = 120) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.hp = hp;
+        this.maxHp = hp;
+        this.atk = atk;
+        this.isBoss = isBoss;
+        this.isRanged = isRanged;
+        this.isStationary = isStationary;
+        this.attackCooldown = attackCooldown;
+
+        this.width = isBoss ? 80 : 44;
+        this.height = isBoss ? 70 : 44;
+        this.vx = isStationary ? 0 : 1.5;
+        this.shootTimer = 0;
+        this.active = true;
+    }
+
+    takeDamage(amount) {
+        this.hp -= amount;
+        createParticles(this.x + this.width / 2, this.y + this.height / 2, '#f59e0b', 10);
+        if (this.hp <= 0) {
+            this.active = false;
+            player.gold += this.isBoss ? 40 : 10;
+            playSound('coin');
+            createParticles(this.x + this.width / 2, this.y + this.height / 2, '#38bdf8', 25);
+            this.onDeath();
+        }
+    }
+
+    onDeath() {
+        // Spec Boss Rewards
+        if (this.type === 'chief_murderer') {
+            player.weapon = { name: 'バズーカ', atk: 5, type: 'ranged' };
+            showMessage('🎁 中ボス撃破！「バズーカ」(遠距離/攻撃力5) を獲得！');
+            updateHUDInfo();
+        } else if (this.type === 'king_shark') {
+            player.weapon = { name: 'ハイドロガン', atk: 10, type: 'hydro' };
+            showMessage('🎁 中ボス撃破！「ハイドロガン」(遠距離/攻撃力10) を獲得！');
+            updateHUDInfo();
+        } else if (this.type === 'cursed_mummy') {
+            player.weapon = { name: '伝説の剣', atk: 5, type: 'legend' };
+            document.getElementById('kame-container').classList.remove('hidden');
+            showMessage('🎁 中ボス撃破！「伝説の剣」(攻撃力5 / 10秒F長押しでカメハメハ) を獲得！');
+            updateHUDInfo();
+        } else if (this.type === 'kaiser_dragon') {
+            gameState = 'VICTORY';
+            document.getElementById('victory-modal').classList.remove('hidden');
+        }
+    }
+
+    update() {
+        if (!this.isStationary) {
+            this.x += this.vx;
+            if (this.x < 300 || this.x > STAGE_LENGTH - 100) this.vx *= -1;
+        }
+
+        // Ranged attacks logic
+        if (this.isRanged) {
+            this.shootTimer++;
+            if (this.shootTimer >= this.attackCooldown) {
+                this.shootTimer = 0;
+                const dir = player.x > this.x ? 1 : -1;
+                projectiles.push(new EnemyProjectile(this.x + this.width / 2, this.y + 15, dir * 5, this.atk));
+            }
+        }
+
+        if (checkCollision(this, player)) {
+            player.takeDamage(this.atk);
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - cameraX, this.y);
+
+        if (this.type.includes('slime') || this.type === 'king_slime') {
+            // Slime / King Slime
+            ctx.fillStyle = this.type === 'king_slime' ? '#22c55e' : '#4ade80';
+            ctx.beginPath();
+            ctx.arc(this.width / 2, this.height / 2 + 5, this.width / 2, 0, Math.PI, true);
+            ctx.fill();
+        } else if (this.type === 'zombie') {
+            // Zombie
+            ctx.fillStyle = '#16a34a';
+            ctx.fillRect(4, 4, this.width - 8, this.height - 4);
+        } else if (this.type === 'robber') {
+            // Robber
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(4, 4, this.width - 8, this.height - 4);
+        } else if (this.type.includes('murderer')) {
+            // Murderer / Chief Murderer
+            ctx.fillStyle = '#991b1b';
+            ctx.fillRect(4, 4, this.width - 8, this.height - 4);
+        } else if (this.type === 'piranha') {
+            // Piranha
+            ctx.fillStyle = '#a855f7';
+            ctx.beginPath();
+            ctx.arc(this.width / 2, this.height / 2, 16, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.type === 'shark' || this.type === 'king_shark') {
+            // Shark / King Shark
+            ctx.fillStyle = '#0284c7';
+            ctx.beginPath();
+            ctx.ellipse(this.width / 2, this.height / 2, this.width / 2, this.height / 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.type === 'man_eating_dolphin') {
+            // Man-eating Dolphin
+            ctx.fillStyle = '#475569';
+            ctx.beginPath();
+            ctx.ellipse(this.width / 2, this.height / 2, this.width / 2, this.height / 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.type === 'cactus') {
+            // Cactus
+            ctx.fillStyle = '#15803d';
+            ctx.roundRect(10, 2, 24, 40, 6);
+            ctx.fill();
+            ctx.fillRect(2, 14, 40, 8);
+        } else if (this.type === 'mummy' || this.type === 'cursed_mummy') {
+            // Mummy / Cursed Mummy
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(4, 4, this.width - 8, this.height - 4);
+        } else if (this.type.includes('dragon')) {
+            // Dragons
+            if (this.type === 'pixie_dragon') ctx.fillStyle = '#ec4899';
+            else if (this.type === 'blue_dragon') ctx.fillStyle = '#2563eb';
+            else if (this.type === 'earth_dragon') ctx.fillStyle = '#78350f';
+            else ctx.fillStyle = '#dc2626'; // Kaiser Dragon
+
+            ctx.fillRect(4, 4, this.width - 8, this.height - 4);
+            // Wings
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.moveTo(-10, 10); ctx.lineTo(10, 0); ctx.lineTo(10, 20); ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+// Pickup Items (Rock)
+class Item {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type; // rock
+        this.width = 20;
+        this.height = 20;
+        this.active = true;
+    }
+    update() {
+        if (checkCollision(this, player)) {
+            if (this.type === 'rock') {
+                player.rocks++;
+                playSound('coin');
+                showMessage('🪨 石ころを拾った！ (Rキーで投擲/攻撃力1)');
+                updateHUDInfo();
+            }
+            this.active = false;
+        }
+    }
+    draw() {
+        ctx.save();
+        ctx.translate(this.x - cameraX, this.y);
+        ctx.font = '18px sans-serif';
+        ctx.fillText('🪨', 0, 16);
+        ctx.restore();
+    }
+}
+
+function checkCollision(r1, r2) {
+    return !(
+        r1.x + r1.width < r2.x ||
+        r1.x > r2.x + r2.width ||
+        r1.y + r1.height < r2.y ||
+        r1.y > r2.y + r2.height
+    );
+}
+
+/* ==========================================================================
+   STAGE MANAGER & SPANNER (Exact Specifications)
+   ========================================================================== */
+
+function loadStage(area, stage) {
+    currentArea = area;
+    currentStage = stage;
+    enemies = [];
+    items = [];
+    projectiles.length = 0;
+    player.x = 100;
+    player.y = GROUND_Y - player.height;
+
+    const areaNames = ['ノーマル', '村', '海', '砂漠', 'ドラゴンの神殿'];
+    document.getElementById('stage-banner').innerText = `エリア ${area} (${areaNames[area - 1]}) - ステージ ${stage}`;
+
+    const bossHpContainer = document.getElementById('boss-hp-container');
+    bossHpContainer.classList.add('hidden');
+
+    // EXACT SPECIFICATION STAGE GENERATION
+    if (area === 1) { // エリア1: ノーマル
+        if (stage === 1) {
+            for (let i = 0; i < 5; i++) enemies.push(new Enemy(600 + i * 250, GROUND_Y - 44, 'slime', 5, 1));
+            items.push(new Item(800, GROUND_Y - 20, 'rock'));
+        } else if (stage === 2) {
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(600 + i * 300, GROUND_Y - 44, 'slime', 5, 1));
+            for (let i = 0; i < 2; i++) enemies.push(new Enemy(1500 + i * 300, GROUND_Y - 44, 'zombie', 10, 1));
+            items.push(new Item(1000, GROUND_Y - 20, 'rock'));
+        } else if (stage === 3) {
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(500 + i * 250, GROUND_Y - 44, 'zombie', 10, 1));
+            for (let i = 0; i < 2; i++) enemies.push(new Enemy(1300 + i * 250, GROUND_Y - 44, 'slime', 5, 1));
+            for (let i = 0; i < 7; i++) items.push(new Item(400 + i * 220, GROUND_Y - 20, 'rock'));
+        } else if (stage === 4) {
+            const boss = new Enemy(1600, GROUND_Y - 70, 'king_slime', 15, 2, true);
+            enemies.push(boss);
+            showBossHP('キングスライム (中ボス)', boss);
+        }
+    } else if (area === 2) { // エリア2: 村
+        if (stage === 1) {
+            for (let i = 0; i < 2; i++) enemies.push(new Enemy(800 + i * 400, GROUND_Y - 44, 'robber', 10, 3));
+        } else if (stage === 2) {
+            // Friendly Village Stage
+            openVillageModal();
+        } else if (stage === 3) {
+            for (let i = 0; i < 2; i++) enemies.push(new Enemy(600 + i * 500, GROUND_Y - 44, 'murderer', 10, 2, false, true));
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(1100 + i * 300, GROUND_Y - 44, 'robber', 10, 3));
+        } else if (stage === 4) {
+            const boss = new Enemy(1600, GROUND_Y - 70, 'chief_murderer', 15, 3, true, true);
+            enemies.push(boss);
+            showBossHP('親玉殺人鬼 (中ボス)', boss);
+        }
+    } else if (area === 3) { // エリア3: 海
+        if (stage === 1) {
+            for (let i = 0; i < 5; i++) enemies.push(new Enemy(500 + i * 200, GROUND_Y - 44, 'piranha', 5, 3));
+            for (let i = 0; i < 2; i++) enemies.push(new Enemy(1600 + i * 350, GROUND_Y - 44, 'shark', 10, 3));
+        } else if (stage === 2) {
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(500 + i * 300, GROUND_Y - 44, 'shark', 10, 3));
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(1400 + i * 300, GROUND_Y - 44, 'man_eating_dolphin', 10, 3));
+        } else if (stage === 3) {
+            enemies.push(new Enemy(500, GROUND_Y - 44, 'piranha', 5, 3));
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(800 + i * 250, GROUND_Y - 44, 'shark', 10, 3));
+            for (let i = 0; i < 4; i++) enemies.push(new Enemy(1500 + i * 200, GROUND_Y - 44, 'man_eating_dolphin', 10, 3));
+        } else if (stage === 4) {
+            const boss = new Enemy(1600, GROUND_Y - 70, 'king_shark', 20, 5, true);
+            enemies.push(boss);
+            showBossHP('キングシャーク (中ボス)', boss);
+        }
+    } else if (area === 4) { // エリア4: 砂漠
+        if (stage === 1) {
+            for (let i = 0; i < 5; i++) enemies.push(new Enemy(500 + i * 350, GROUND_Y - 44, 'cactus', 20, 5, false, false, true));
+        } else if (stage === 2) {
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(500 + i * 400, GROUND_Y - 44, 'cactus', 20, 5, false, false, true));
+            for (let i = 0; i < 5; i++) enemies.push(new Enemy(700 + i * 250, GROUND_Y - 44, 'mummy', 15, 3));
+        } else if (stage === 3) {
+            for (let i = 0; i < 5; i++) enemies.push(new Enemy(400 + i * 350, GROUND_Y - 44, 'cactus', 20, 5, false, false, true));
+            for (let i = 0; i < 5; i++) enemies.push(new Enemy(600 + i * 280, GROUND_Y - 44, 'mummy', 15, 3));
+        } else if (stage === 4) {
+            // Cursed Mummy (Hybrid ranged ATK 3 & melee ATK 2)
+            const boss = new Enemy(1600, GROUND_Y - 70, 'cursed_mummy', 20, 2, true, true);
+            boss.atkRanged = 3;
+            enemies.push(boss);
+            showBossHP('呪い深いミイラ (中ボス)', boss);
+        }
+    } else if (area === 5) { // エリア5: ドラゴンの神殿
+        if (stage === 1) {
+            // Pixie dragon (3s ranged atk -> 180 frames)
+            for (let i = 0; i < 5; i++) enemies.push(new Enemy(500 + i * 300, GROUND_Y - 44, 'pixie_dragon', 5, 5, false, true, false, 180));
+        } else if (stage === 2) {
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(500 + i * 300, GROUND_Y - 44, 'pixie_dragon', 5, 5, false, true, false, 180));
+            for (let i = 0; i < 2; i++) enemies.push(new Enemy(1400 + i * 350, GROUND_Y - 44, 'blue_dragon', 10, 5));
+        } else if (stage === 3) {
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(500 + i * 300, GROUND_Y - 44, 'blue_dragon', 10, 5));
+            for (let i = 0; i < 3; i++) enemies.push(new Enemy(1400 + i * 300, GROUND_Y - 44, 'earth_dragon', 10, 3));
+        } else if (stage === 4) {
+            const boss = new Enemy(1600, GROUND_Y - 80, 'kaiser_dragon', 200, 5, true, true, false, 90);
+            enemies.push(boss);
+            showBossHP('カイゼードラゴン (ラスボス)', boss);
+        }
+    }
+}
+
+let activeBoss = null;
+function showBossHP(name, bossObj) {
+    activeBoss = bossObj;
+    const container = document.getElementById('boss-hp-container');
+    document.getElementById('boss-name-label').innerText = name;
+    container.classList.remove('hidden');
+}
+
+function updateHUDInfo() {
+    document.getElementById('hp-bar').style.width = `${(player.hp / player.maxHp) * 100}%`;
+    document.getElementById('hp-text').innerText = `${player.hp} / ${player.maxHp}`;
+    document.getElementById('rock-count').innerText = player.rocks;
+    document.getElementById('sandwich-count').innerText = player.sandwiches;
+    document.getElementById('gold-count').innerText = player.gold;
+    document.getElementById('weapon-name').innerText = player.weapon.name;
+    document.getElementById('weapon-atk').innerText = player.weapon.atk;
+    document.getElementById('armor-name').innerText = player.armor.name;
+
+    if (keys.kame && keyPressTimes.kameStart > 0 && player.weapon.type === 'legend') {
+        const elapsed = (Date.now() - keyPressTimes.kameStart) / 1000;
+        const progress = Math.min(100, (elapsed / 10.0) * 100);
+        document.getElementById('kame-charge-bar').style.width = `${progress}%`;
+    } else {
+        document.getElementById('kame-charge-bar').style.width = `0%`;
+    }
+
+    if (activeBoss && activeBoss.active) {
+        const pct = Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100);
+        document.getElementById('boss-hp-bar').style.width = `${pct}%`;
+        document.getElementById('boss-hp-text').innerText = `${activeBoss.hp} / ${activeBoss.maxHp}`;
+    }
+}
+
+function checkStageProgress() {
+    if (player.x >= STAGE_LENGTH - 150 && enemies.length === 0) {
+        if (currentStage < 4) {
+            loadStage(currentArea, currentStage + 1);
+        } else if (currentArea < 5) {
+            loadStage(currentArea + 1, 1);
+        }
+    }
+}
+
+/* ==========================================================================
+   RENDER & GAME LOOP
+   ========================================================================== */
+
+function drawBackground() {
+    let bgGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    if (currentArea === 1) {
+        bgGrad.addColorStop(0, '#0f172a'); bgGrad.addColorStop(1, '#1e293b'); // Normal
+    } else if (currentArea === 2) {
+        bgGrad.addColorStop(0, '#0284c7'); bgGrad.addColorStop(1, '#38bdf8'); // Village
+    } else if (currentArea === 3) {
+        bgGrad.addColorStop(0, '#0c4a6e'); bgGrad.addColorStop(1, '#0284c7'); // Sea
+    } else if (currentArea === 4) {
+        bgGrad.addColorStop(0, '#78350f'); bgGrad.addColorStop(1, '#f59e0b'); // Desert
+    } else if (currentArea === 5) {
+        bgGrad.addColorStop(0, '#450a0a'); bgGrad.addColorStop(1, '#991b1b'); // Dragon Temple
+    }
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Ground Floor
+    ctx.fillStyle = currentArea === 4 ? '#d97706' : (currentArea === 3 ? '#0284c7' : '#334155');
+    ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    ctx.lineTo(CANVAS_WIDTH, GROUND_Y);
+    ctx.stroke();
+}
+
+function gameLoop() {
+    if (gameState === 'PLAYING') {
+        player.update();
+
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            projectiles[i].update();
+            if (!projectiles[i].active && !projectiles[i].life) projectiles.splice(i, 1);
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            enemies[i].update();
+            if (!enemies[i].active) enemies.splice(i, 1);
+        }
+
+        for (let i = items.length - 1; i >= 0; i--) {
+            items[i].update();
+            if (!items[i].active) items.splice(i, 1);
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].x += particles[i].vx;
+            particles[i].y += particles[i].vy;
+            particles[i].life--;
+            if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+
+        for (let i = slashes.length - 1; i >= 0; i--) {
+            slashes[i].update();
+            if (slashes[i].life <= 0) slashes.splice(i, 1);
+        }
+
+        checkStageProgress();
+        updateHUDInfo();
+
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        drawBackground();
+
+        items.forEach(item => item.draw());
+        enemies.forEach(enemy => enemy.draw());
+        player.draw();
+        projectiles.forEach(p => p.draw());
+        slashes.forEach(s => s.draw());
+
+        particles.forEach(p => {
+            ctx.save();
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x - cameraX, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+/* ==========================================================================
+   VILLAGE SHOP & MINIGAMES INTERACTION
+   ========================================================================== */
+
+function openVillageModal() {
+    gameState = 'VILLAGE';
+    document.getElementById('village-modal').classList.remove('hidden');
+}
+
+document.getElementById('leave-village-btn').addEventListener('click', () => {
+    document.getElementById('village-modal').classList.add('hidden');
+    gameState = 'PLAYING';
+});
+
+// Shop Purchasing Logic
+document.getElementById('buy-sword-btn').addEventListener('click', () => {
+    if (player.gold >= 30) {
+        player.gold -= 30;
+        player.weapon = { name: '剣', atk: 5, type: 'melee' };
+        playSound('coin');
+        updateHUDInfo();
+        alert('⚔️ 剣を購入しました！ (攻撃力 5)');
+    } else {
+        alert('ゴールドが足りません！ (30G必要)');
+    }
+});
+
+document.getElementById('buy-armor-btn').addEventListener('click', () => {
+    if (player.gold >= 30) {
+        player.gold -= 30;
+        player.armor = { name: '鎧', def: 3 };
+        playSound('coin');
+        updateHUDInfo();
+        alert('🛡️ 鎧を購入しました！ (防御力 3)');
+    } else {
+        alert('ゴールドが足りません！ (30G必要)');
+    }
+});
+
+document.getElementById('buy-sandwich-btn').addEventListener('click', () => {
+    if (player.gold >= 10) {
+        player.gold -= 10;
+        player.sandwiches++;
+        playSound('coin');
+        updateHUDInfo();
+    } else {
+        alert('ゴールドが足りません！ (10G必要)');
+    }
+});
+
+// Minigame 1: Tic Tac Toe
+let tttBoard = Array(9).fill(null);
+let tttActive = false;
+
+document.getElementById('minigame-ttt-btn').addEventListener('click', () => {
+    document.getElementById('village-modal').classList.add('hidden');
+    document.getElementById('minigame-modal').classList.remove('hidden');
+    document.getElementById('minigame-title').innerText = '🎮 ○×ゲーム';
+    document.getElementById('ttt-container').classList.remove('hidden');
+    document.getElementById('rps-container').classList.add('hidden');
+    document.getElementById('fishing-container').classList.add('hidden');
+    initTTT();
+});
+
+function initTTT() {
+    tttBoard = Array(9).fill(null);
+    tttActive = true;
+    const cells = document.querySelectorAll('.ttt-cell');
+    cells.forEach(cell => { cell.innerText = ''; cell.className = 'ttt-cell'; });
+    document.getElementById('ttt-status').innerText = 'あなたの番です (O)';
+}
+
+document.querySelectorAll('.ttt-cell').forEach(cell => {
+    cell.addEventListener('click', (e) => {
+        if (!tttActive) return;
+        const idx = e.target.getAttribute('data-idx');
+        if (tttBoard[idx]) return;
+
+        tttBoard[idx] = 'O';
+        e.target.innerText = 'O';
+        e.target.classList.add('o');
+
+        if (checkTTTWin('O')) {
+            document.getElementById('ttt-status').innerText = '🎉 勝利！ 30ゴールド獲得！';
+            player.gold += 30;
+            playSound('coin');
+            updateHUDInfo();
+            tttActive = false;
+            return;
+        }
+
+        if (tttBoard.every(c => c !== null)) {
+            document.getElementById('ttt-status').innerText = '引き分け！';
+            tttActive = false;
+            return;
+        }
+
+        const emptyIndices = tttBoard.map((val, i) => val === null ? i : null).filter(val => val !== null);
+        const aiIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+        tttBoard[aiIdx] = 'X';
+        const aiCell = document.querySelector(`.ttt-cell[data-idx="${aiIdx}"]`);
+        aiCell.innerText = 'X';
+        aiCell.classList.add('x');
+
+        if (checkTTTWin('X')) {
+            document.getElementById('ttt-status').innerText = '負けてしまった...';
+            tttActive = false;
+        }
+    });
+});
+
+function checkTTTWin(symbol) {
+    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    return wins.some(w => w.every(i => tttBoard[i] === symbol));
+}
+
+// Minigame 2: Rock Paper Scissors
+document.getElementById('minigame-rps-btn').addEventListener('click', () => {
+    document.getElementById('village-modal').classList.add('hidden');
+    document.getElementById('minigame-modal').classList.remove('hidden');
+    document.getElementById('minigame-title').innerText = '✊ じゃんけん勝負';
+    document.getElementById('ttt-container').classList.add('hidden');
+    document.getElementById('rps-container').classList.remove('hidden');
+    document.getElementById('fishing-container').classList.add('hidden');
+    document.getElementById('rps-status').innerText = '手を選んでね！';
+});
+
+document.querySelectorAll('.rps-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const playerChoice = e.target.getAttribute('data-hand');
+        const choices = ['rock', 'paper', 'scissors'];
+        const aiChoice = choices[Math.floor(Math.random() * 3)];
+
+        const handIcons = { rock: '✊', paper: '✋', scissors: '✌️' };
+        
+        if (playerChoice === aiChoice) {
+            document.getElementById('rps-status').innerText = `あいこ！ (相手: ${handIcons[aiChoice]}) もう一度！`;
+        } else if (
+            (playerChoice === 'rock' && aiChoice === 'scissors') ||
+            (playerChoice === 'paper' && aiChoice === 'rock') ||
+            (playerChoice === 'scissors' && aiChoice === 'paper')
+        ) {
+            document.getElementById('rps-status').innerText = `🎉 勝利！(相手: ${handIcons[aiChoice]}) 30ゴールド獲得！`;
+            player.gold += 30;
+            playSound('coin');
+            updateHUDInfo();
+        } else {
+            document.getElementById('rps-status').innerText = `負け！ (相手: ${handIcons[aiChoice]}) 残念！`;
+        }
+    });
+});
+
+// Minigame 3: Fishing Game
+let fishingAnimId = null;
+let fishX = 0;
+let targetLeft = 100;
+let targetRight = 200;
+let fishSpeed = 4;
+
+document.getElementById('minigame-fish-btn').addEventListener('click', () => {
+    document.getElementById('village-modal').classList.add('hidden');
+    document.getElementById('minigame-modal').classList.remove('hidden');
+    document.getElementById('minigame-title').innerText = '🎣 魚釣りゲーム';
+    document.getElementById('ttt-container').classList.add('hidden');
+    document.getElementById('rps-container').classList.add('hidden');
+    document.getElementById('fishing-container').classList.remove('hidden');
+    startFishingGame();
+});
+
+function startFishingGame() {
+    const fishCanvas = document.getElementById('fishingCanvas');
+    const fctx = fishCanvas.getContext('2d');
+    fishX = 0;
+    fishSpeed = 4;
+
+    function renderFishing() {
+        fctx.clearRect(0, 0, 300, 150);
+
+        fctx.fillStyle = '#0284c7';
+        fctx.fillRect(0, 0, 300, 150);
+
+        fctx.fillStyle = '#34d399';
+        fctx.fillRect(targetLeft, 40, targetRight - targetLeft, 70);
+
+        fishX += fishSpeed;
+        if (fishX > 280 || fishX < 0) fishSpeed *= -1;
+
+        fctx.font = '24px sans-serif';
+        fctx.fillText('🐟', fishX, 80);
+
+        fishingAnimId = requestAnimationFrame(renderFishing);
+    }
+    cancelAnimationFrame(fishingAnimId);
+    renderFishing();
+}
+
+document.getElementById('fish-pull-btn').addEventListener('click', () => {
+    cancelAnimationFrame(fishingAnimId);
+    if (fishX >= targetLeft && fishX <= targetRight) {
+        alert('🎉 魚をゲット！ 30ゴールド獲得！');
+        player.gold += 30;
+        playSound('coin');
+        updateHUDInfo();
+    } else {
+        alert('逃げられてしまった...');
+    }
+    startFishingGame();
+});
+
+document.getElementById('close-minigame-btn').addEventListener('click', () => {
+    cancelAnimationFrame(fishingAnimId);
+    document.getElementById('minigame-modal').classList.add('hidden');
+    openVillageModal();
+});
+
+/* ==========================================================================
+   START / RESTART CONTROLLERS
+   ========================================================================== */
+
+function startGame() {
+    gameState = 'PLAYING';
+    player.hp = 10;
+    player.maxHp = 10;
+    player.gold = 0;
+    player.sandwiches = 0;
+    player.rocks = 0;
+    player.weapon = { name: '素手', atk: 1, type: 'melee' };
+    player.armor = { name: 'なし', def: 0 };
+    document.getElementById('start-modal').classList.add('hidden');
+    document.getElementById('gameover-modal').classList.add('hidden');
+    document.getElementById('victory-modal').classList.add('hidden');
+    loadStage(1, 1);
+}
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+document.getElementById('victory-restart-btn').addEventListener('click', startGame);
+
+requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>
